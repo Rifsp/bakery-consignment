@@ -35,19 +35,24 @@ class Distribusi extends BaseController
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
 
+        $user = $this->getUser();
         $tanggalMulai = $this->request->getGet('tanggal_mulai') ?? date('Y-m-01');
         $tanggalAkhir = $this->request->getGet('tanggal_akhir') ?? date('Y-m-d');
 
+        $builder = $this->distribusiModel
+            ->select('distribusi.*, distribusi.kode_distribusi, sales.nama_sales, warung.nama_warung')
+            ->join('sales', 'sales.id = distribusi.id_sales')
+            ->join('warung', 'warung.id = distribusi.id_warung')
+            ->where('distribusi.tanggal_distribusi >=', $tanggalMulai)
+            ->where('distribusi.tanggal_distribusi <=', $tanggalAkhir);
+
+        if ($user['role'] === 'sales') {
+            $builder->where('distribusi.id_sales', $this->getSalesId());
+        }
+
         $data = [
-            'user' => $this->getUser(),
-            'distribusi' => $this->distribusiModel
-                ->select('distribusi.*, sales.nama_sales, warung.nama_warung')
-                ->join('sales', 'sales.id = distribusi.id_sales')
-                ->join('warung', 'warung.id = distribusi.id_warung')
-                ->where('distribusi.tanggal_distribusi >=', $tanggalMulai)
-                ->where('distribusi.tanggal_distribusi <=', $tanggalAkhir)
-                ->orderBy('distribusi.tanggal_distribusi', 'DESC')
-                ->findAll(),
+            'user' => $user,
+            'distribusi' => $builder->orderBy('distribusi.tanggal_distribusi', 'DESC')->findAll(),
             'tanggal_mulai' => $tanggalMulai,
             'tanggal_akhir' => $tanggalAkhir,
         ];
@@ -76,6 +81,22 @@ class Distribusi extends BaseController
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
 
+        $id_sales = $this->request->getPost('id_sales');
+        $produkIds = $this->request->getPost('id_produk');
+        $jumlahs = $this->request->getPost('jumlah');
+
+        if ($produkIds) {
+            foreach ($produkIds as $i => $produkId) {
+                $jumlah = (int) $jumlahs[$i];
+                $stokSales = $this->hitungStokSales($id_sales, $produkId);
+                if ($jumlah > $stokSales) {
+                    $produk = $this->produkModel->find($produkId);
+                    $namaProduk = $produk ? $produk['nama_produk'] : 'ID ' . $produkId;
+                    return redirect()->back()->withInput()->with('error', "Stok sales tidak cukup untuk produk {$namaProduk}. Sisa stok: {$stokSales}");
+                }
+            }
+        }
+
         $db = \Config\Database::connect();
         $db->transStart();
 
@@ -83,7 +104,7 @@ class Distribusi extends BaseController
             'kode_distribusi' => $this->generateKodeTransaksi('distribusi', 'kode_distribusi', 'DB'),
             'id_stok_sales' => $this->request->getPost('id_stok_sales') ?: null,
             'id_warung' => $this->request->getPost('id_warung'),
-            'id_sales' => $this->request->getPost('id_sales'),
+            'id_sales' => $id_sales,
             'tanggal_distribusi' => $this->request->getPost('tanggal_distribusi'),
             'keterangan' => $this->request->getPost('keterangan'),
         ];
@@ -91,9 +112,7 @@ class Distribusi extends BaseController
         $this->distribusiModel->insert($distribusiData);
         $distribusiId = $this->distribusiModel->getInsertID();
 
-        $produkIds = $this->request->getPost('id_produk');
         $hargaIds = $this->request->getPost('id_harga');
-        $jumlahs = $this->request->getPost('jumlah');
 
         if ($produkIds) {
             foreach ($produkIds as $i => $produkId) {
@@ -150,5 +169,128 @@ class Distribusi extends BaseController
         ];
 
         return view('distribusi/detail', $data);
+    }
+
+    public function edit($id)
+    {
+        $redirect = $this->requireLogin();
+        if ($redirect) return $redirect;
+
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $distribusi = $this->distribusiModel
+            ->select('distribusi.*, sales.nama_sales, warung.nama_warung')
+            ->join('sales', 'sales.id = distribusi.id_sales')
+            ->join('warung', 'warung.id = distribusi.id_warung')
+            ->find($id);
+
+        if (!$distribusi) {
+            return redirect()->to('distribusi')->with('error', 'Data tidak ditemukan');
+        }
+
+        $detail = $this->detailDistribusiModel
+            ->select('detail_distribusi.*, produk.nama_produk, harga_jual.nama_harga')
+            ->join('produk', 'produk.id = detail_distribusi.id_produk')
+            ->join('harga_jual', 'harga_jual.id = detail_distribusi.id_harga')
+            ->where('id_distribusi', $id)
+            ->findAll();
+
+        $data = [
+            'user' => $this->getUser(),
+            'distribusi' => $distribusi,
+            'detail' => $detail,
+            'sales_list' => $this->salesModel->where('status_aktif', true)->findAll(),
+            'warung_list' => $this->warungModel->where('status_aktif', true)->findAll(),
+            'produk_list' => $this->produkModel->orderBy('nama_produk', 'ASC')->findAll(),
+            'harga_list' => $this->hargaJualModel->findAll(),
+        ];
+
+        return view('distribusi/edit', $data);
+    }
+
+    public function update($id)
+    {
+        $redirect = $this->requireLogin();
+        if ($redirect) return $redirect;
+
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $distribusi = $this->distribusiModel->find($id);
+        if (!$distribusi) {
+            return redirect()->to('distribusi')->with('error', 'Data tidak ditemukan');
+        }
+
+        $db = \Config\Database::connect();
+        $db->transStart();
+
+        $distribusiData = [
+            'id_warung' => $this->request->getPost('id_warung'),
+            'id_sales' => $this->request->getPost('id_sales'),
+            'tanggal_distribusi' => $this->request->getPost('tanggal_distribusi'),
+            'keterangan' => $this->request->getPost('keterangan'),
+        ];
+
+        $this->distribusiModel->update($id, $distribusiData);
+
+        $this->detailDistribusiModel->where('id_distribusi', $id)->delete();
+
+        $produkIds = $this->request->getPost('id_produk');
+        $hargaIds = $this->request->getPost('id_harga');
+        $jumlahs = $this->request->getPost('jumlah');
+
+        if ($produkIds) {
+            foreach ($produkIds as $i => $produkId) {
+                $harga = $this->hargaJualModel->find($hargaIds[$i]);
+                $jumlah = $jumlahs[$i];
+                $hargaSatuan = $harga ? $harga['harga_jual'] : 0;
+
+                $this->detailDistribusiModel->insert([
+                    'id_distribusi' => $id,
+                    'id_produk' => $produkId,
+                    'id_harga' => $hargaIds[$i],
+                    'jumlah' => $jumlah,
+                    'harga_satuan' => $hargaSatuan,
+                    'subtotal' => $hargaSatuan * $jumlah,
+                ]);
+            }
+        }
+
+        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            return redirect()->back()->withInput()->with('error', 'Gagal mengupdate distribusi');
+        }
+
+        return redirect()->to("distribusi/detail/{$id}")->with('success', 'Distribusi berhasil diupdate');
+    }
+
+    public function delete($id)
+    {
+        $redirect = $this->requireLogin();
+        if ($redirect) return $redirect;
+
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $distribusi = $this->distribusiModel->find($id);
+        if (!$distribusi) {
+            return redirect()->to('distribusi')->with('error', 'Data tidak ditemukan');
+        }
+
+        $db = \Config\Database::connect();
+        $db->transStart();
+
+        $this->detailDistribusiModel->where('id_distribusi', $id)->delete();
+        $this->distribusiModel->delete($id);
+
+        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            return redirect()->to('distribusi')->with('error', 'Gagal menghapus distribusi');
+        }
+
+        return redirect()->to('distribusi')->with('success', 'Distribusi berhasil dihapus');
     }
 }

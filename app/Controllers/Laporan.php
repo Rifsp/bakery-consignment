@@ -160,6 +160,57 @@ class Laporan extends BaseController
         return view('laporan/stok', $data);
     }
 
+    public function stokWarung()
+    {
+        $redirect = $this->requireLogin();
+        if ($redirect) return $redirect;
+
+        $db = \Config\Database::connect();
+
+        $stokWarung = $db->query("
+            SELECT 
+                w.id as id_warung,
+                w.nama_warung,
+                p.id as id_produk,
+                p.nama_produk,
+                COALESCE(SUM(dd.jumlah), 0) as total_distribusi,
+                COALESCE(SUM(dp.jumlah_terjual), 0) as total_terjual,
+                COALESCE(SUM(dr.jumlah), 0) as total_retur,
+                (COALESCE(SUM(dd.jumlah), 0) - COALESCE(SUM(dp.jumlah_terjual), 0) - COALESCE(SUM(dr.jumlah), 0)) as sisa_stok
+            FROM warung w
+            CROSS JOIN produk p
+            LEFT JOIN distribusi d ON d.id_warung = w.id
+            LEFT JOIN detail_distribusi dd ON dd.id_distribusi = d.id AND dd.id_produk = p.id
+            LEFT JOIN penjualan pj ON pj.id_warung = w.id
+            LEFT JOIN detail_penjualan dp ON dp.id_penjualan = pj.id AND dp.id_produk = p.id
+            LEFT JOIN retur r ON r.id_warung = w.id
+            LEFT JOIN detail_retur dr ON dr.id_retur = r.id AND dr.id_produk = p.id
+            WHERE w.status_aktif = true
+            GROUP BY w.id, w.nama_warung, p.id, p.nama_produk
+            HAVING (COALESCE(SUM(dd.jumlah), 0) - COALESCE(SUM(dp.jumlah_terjual), 0) - COALESCE(SUM(dr.jumlah), 0)) > 0
+            ORDER BY w.nama_warung, p.nama_produk
+        ")->getResultArray();
+
+        // Calculate summary from stokWarung results
+        $summaryWarung = [];
+        foreach ($stokWarung as $sw) {
+            $nama = $sw['nama_warung'];
+            if (!isset($summaryWarung[$nama])) {
+                $summaryWarung[$nama] = ['nama_warung' => $nama, 'total_stok' => 0];
+            }
+            $summaryWarung[$nama]['total_stok'] += $sw['sisa_stok'];
+        }
+        $summaryWarung = array_values($summaryWarung);
+
+        $data = [
+            'user' => $this->getUser(),
+            'stok_warung' => $stokWarung,
+            'summary_warung' => $summaryWarung,
+        ];
+
+        return view('laporan/stok_warung', $data);
+    }
+
     public function exportPenjualan()
     {
         $redirect = $this->requireLogin();

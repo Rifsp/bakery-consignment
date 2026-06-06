@@ -62,12 +62,18 @@ $routes->get('/distribusi', 'Distribusi::index');
 $routes->get('/distribusi/create', 'Distribusi::create');
 $routes->post('/distribusi/store', 'Distribusi::store');
 $routes->get('/distribusi/detail/(:num)', 'Distribusi::detail/$1');
+$routes->get('/distribusi/edit/(:num)', 'Distribusi::edit/$1');
+$routes->post('/distribusi/update/(:num)', 'Distribusi::update/$1');
+$routes->get('/distribusi/delete/(:num)', 'Distribusi::delete/$1');
 
 // Penjualan
 $routes->get('/penjualan', 'Penjualan::index');
 $routes->get('/penjualan/create', 'Penjualan::create');
 $routes->post('/penjualan/store', 'Penjualan::store');
 $routes->get('/penjualan/detail/(:num)', 'Penjualan::detail/$1');
+$routes->get('/penjualan/edit/(:num)', 'Penjualan::edit/$1');
+$routes->post('/penjualan/update/(:num)', 'Penjualan::update/$1');
+$routes->get('/penjualan/delete/(:num)', 'Penjualan::delete/$1');
 
 // Pembelian
 $routes->get('/pembelian', 'Pembelian::index');
@@ -81,9 +87,21 @@ $routes->get('/retur', 'Retur::index');
 $routes->get('/retur/create', 'Retur::create');
 $routes->post('/retur/store', 'Retur::store');
 $routes->get('/retur/detail/(:num)', 'Retur::detail/$1');
+$routes->get('/retur/edit/(:num)', 'Retur::edit/$1');
+$routes->post('/retur/update/(:num)', 'Retur::update/$1');
+$routes->get('/retur/delete/(:num)', 'Retur::delete/$1');
 
 // Laporan
 $routes->get('/laporan/penjualan', 'Laporan::penjualan');
 $routes->get('/laporan/stok', 'Laporan::stok');
+$routes->get('/laporan/stok-warung', 'Laporan::stokWarung');
 $routes->get('/laporan/export-penjualan', 'Laporan::exportPenjualan');
 $routes->get('/laporan/export-stok', 'Laporan::exportStok');
+
+// User Management (admin only)
+$routes->get('/users', 'User::index');
+$routes->get('/users/create', 'User::create');
+$routes->post('/users/store', 'User::store');
+$routes->get('/users/edit/(:num)', 'User::edit/$1');
+$routes->post('/users/update/(:num)', 'User::update/$1');
+$routes->get('/users/delete/(:num)', 'User::delete/$1');

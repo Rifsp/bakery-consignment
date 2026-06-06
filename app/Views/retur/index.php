@@ -1,3 +1,4 @@
+<?php $role = session()->get('role'); ?>
 <?= view('layout/header', ['title' => 'Retur']) ?>
 <?= view('layout/sidebar') ?>
 <div class="main-content">
@@ -51,7 +52,13 @@
                                     <td><?= $r['nama_sales'] ?></td>
                                     <td>Rp <?= number_format($r['total_retur'], 0, ',', '.') ?></td>
                                     <td><?= $r['alasan_retur'] ?></td>
-                                    <td><a href="retur/detail/<?= $r['id'] ?>" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a></td>
+                                    <td>
+                                        <a href="retur/detail/<?= $r['id'] ?>" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a>
+                                        <?php if ($role === 'admin'): ?>
+                                            <a href="retur/edit/<?= $r['id'] ?>" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>
+                                            <a href="retur/delete/<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Yakin hapus?')"><i class="bi bi-trash"></i></a>
+                                        <?php endif; ?>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>

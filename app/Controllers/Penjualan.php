@@ -38,19 +38,24 @@ class Penjualan extends BaseController
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
 
+        $user = $this->getUser();
         $tanggalMulai = $this->request->getGet('tanggal_mulai') ?? date('Y-m-01');
         $tanggalAkhir = $this->request->getGet('tanggal_akhir') ?? date('Y-m-d');
 
+        $builder = $this->penjualanModel
+            ->select('penjualan.*, sales.nama_sales, warung.nama_warung')
+            ->join('sales', 'sales.id = penjualan.id_sales')
+            ->join('warung', 'warung.id = penjualan.id_warung')
+            ->where('penjualan.tanggal_penjualan >=', $tanggalMulai)
+            ->where('penjualan.tanggal_penjualan <=', $tanggalAkhir);
+
+        if ($user['role'] === 'sales') {
+            $builder->where('penjualan.id_sales', $this->getSalesId());
+        }
+
         $data = [
-            'user' => $this->getUser(),
-            'penjualan' => $this->penjualanModel
-                ->select('penjualan.*, sales.nama_sales, warung.nama_warung')
-                ->join('sales', 'sales.id = penjualan.id_sales')
-                ->join('warung', 'warung.id = penjualan.id_warung')
-                ->where('penjualan.tanggal_penjualan >=', $tanggalMulai)
-                ->where('penjualan.tanggal_penjualan <=', $tanggalAkhir)
-                ->orderBy('penjualan.tanggal_penjualan', 'DESC')
-                ->findAll(),
+            'user' => $user,
+            'penjualan' => $builder->orderBy('penjualan.tanggal_penjualan', 'DESC')->findAll(),
             'tanggal_mulai' => $tanggalMulai,
             'tanggal_akhir' => $tanggalAkhir,
         ];
@@ -84,16 +89,28 @@ class Penjualan extends BaseController
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
 
+        $produkIds = $this->request->getPost('id_produk');
+        $hargaIds = $this->request->getPost('id_harga');
+        $jumlahs = $this->request->getPost('jumlah_terjual');
+        $idWarung = $this->request->getPost('id_warung');
+
+        if ($produkIds) {
+            foreach ($produkIds as $i => $produkId) {
+                $stokWarung = $this->hitungStokWarung($idWarung, $produkId);
+                if ($jumlahs[$i] > $stokWarung) {
+                    $produk = $this->produkModel->find($produkId);
+                    $namaProduk = $produk ? $produk['nama_produk'] : 'ID ' . $produkId;
+                    return redirect()->back()->withInput()->with('error', "Stok di warung tidak cukup untuk produk {$namaProduk}. Sisa stok: {$stokWarung}");
+                }
+            }
+        }
+
         $db = \Config\Database::connect();
         $db->transStart();
 
         $totalPenjualan = 0;
         $totalHpp = 0;
         $totalFee = 0;
-
-        $produkIds = $this->request->getPost('id_produk');
-        $hargaIds = $this->request->getPost('id_harga');
-        $jumlahs = $this->request->getPost('jumlah_terjual');
 
         if ($produkIds) {
             foreach ($produkIds as $i => $produkId) {
@@ -115,7 +132,7 @@ class Penjualan extends BaseController
             'kode_penjualan' => $this->generateKodeTransaksi('penjualan', 'kode_penjualan', 'PJ'),
             'id_distribusi' => $this->request->getPost('id_distribusi') ?: null,
             'id_sales' => $this->request->getPost('id_sales'),
-            'id_warung' => $this->request->getPost('id_warung'),
+            'id_warung' => $idWarung,
             'tanggal_penjualan' => $this->request->getPost('tanggal_penjualan'),
             'total_penjualan' => $totalPenjualan,
             'total_hpp' => $totalHpp,
@@ -190,5 +207,155 @@ class Penjualan extends BaseController
         ];
 
         return view('penjualan/detail', $data);
+    }
+
+    public function edit($id)
+    {
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $penjualan = $this->penjualanModel
+            ->select('penjualan.*, sales.nama_sales, warung.nama_warung')
+            ->join('sales', 'sales.id = penjualan.id_sales')
+            ->join('warung', 'warung.id = penjualan.id_warung')
+            ->find($id);
+
+        if (!$penjualan) {
+            return redirect()->to('penjualan')->with('error', 'Data tidak ditemukan');
+        }
+
+        $detail = $this->detailPenjualanModel
+            ->select('detail_penjualan.*, produk.nama_produk, harga_jual.nama_harga')
+            ->join('produk', 'produk.id = detail_penjualan.id_produk')
+            ->join('harga_jual', 'harga_jual.id = detail_penjualan.id_harga')
+            ->where('id_penjualan', $id)
+            ->findAll();
+
+        $data = [
+            'user' => $this->getUser(),
+            'penjualan' => $penjualan,
+            'detail' => $detail,
+            'sales_list' => $this->salesModel->where('status_aktif', true)->findAll(),
+            'warung_list' => $this->warungModel->where('status_aktif', true)->findAll(),
+            'produk_list' => $this->produkModel->orderBy('nama_produk', 'ASC')->findAll(),
+            'harga_list' => $this->hargaJualModel->findAll(),
+            'distribusi_list' => $this->distribusiModel
+                ->select('distribusi.*, sales.nama_sales, warung.nama_warung')
+                ->join('sales', 'sales.id = distribusi.id_sales')
+                ->join('warung', 'warung.id = distribusi.id_warung')
+                ->findAll(),
+        ];
+
+        return view('penjualan/edit', $data);
+    }
+
+    public function update($id)
+    {
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $penjualan = $this->penjualanModel->find($id);
+        if (!$penjualan) {
+            return redirect()->to('penjualan')->with('error', 'Data tidak ditemukan');
+        }
+
+        $produkIds = $this->request->getPost('id_produk');
+        $hargaIds = $this->request->getPost('id_harga');
+        $jumlahs = $this->request->getPost('jumlah_terjual');
+
+        $db = \Config\Database::connect();
+        $db->transStart();
+
+        $totalPenjualan = 0;
+        $totalHpp = 0;
+        $totalFee = 0;
+
+        if ($produkIds) {
+            foreach ($produkIds as $i => $produkId) {
+                $harga = $this->hargaJualModel->find($hargaIds[$i]);
+                $produk = $this->produkModel->find($produkId);
+                $jumlah = $jumlahs[$i];
+
+                $hargaSatuan = $harga ? $harga['harga_jual'] : 0;
+                $hppSatuan = $produk ? $produk['hpp'] : 0;
+                $feeSatuan = $harga ? $harga['fee_sales'] : 0;
+
+                $totalPenjualan += $hargaSatuan * $jumlah;
+                $totalHpp += $hppSatuan * $jumlah;
+                $totalFee += $feeSatuan * $jumlah;
+            }
+        }
+
+        $this->penjualanModel->update($id, [
+            'id_distribusi' => $this->request->getPost('id_distribusi') ?: null,
+            'id_sales' => $this->request->getPost('id_sales'),
+            'id_warung' => $this->request->getPost('id_warung'),
+            'tanggal_penjualan' => $this->request->getPost('tanggal_penjualan'),
+            'total_penjualan' => $totalPenjualan,
+            'total_hpp' => $totalHpp,
+            'total_fee_sales' => $totalFee,
+            'total_profit' => $totalPenjualan - $totalHpp - $totalFee,
+            'keterangan' => $this->request->getPost('keterangan'),
+        ]);
+
+        $this->detailPenjualanModel->where('id_penjualan', $id)->delete();
+
+        if ($produkIds) {
+            foreach ($produkIds as $i => $produkId) {
+                $harga = $this->hargaJualModel->find($hargaIds[$i]);
+                $produk = $this->produkModel->find($produkId);
+                $jumlah = $jumlahs[$i];
+
+                $hargaSatuan = $harga ? $harga['harga_jual'] : 0;
+                $hppSatuan = $produk ? $produk['hpp'] : 0;
+                $feeSatuan = $harga ? $harga['fee_sales'] : 0;
+
+                $this->detailPenjualanModel->insert([
+                    'id_penjualan' => $id,
+                    'id_produk' => $produkId,
+                    'id_harga' => $hargaIds[$i],
+                    'jumlah_terjual' => $jumlah,
+                    'harga_satuan' => $hargaSatuan,
+                    'hpp_satuan' => $hppSatuan,
+                    'fee_sales_satuan' => $feeSatuan,
+                    'subtotal' => $hargaSatuan * $jumlah,
+                    'subtotal_hpp' => $hppSatuan * $jumlah,
+                    'subtotal_fee' => $feeSatuan * $jumlah,
+                ]);
+            }
+        }
+
+        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            return redirect()->back()->withInput()->with('error', 'Gagal mengupdate penjualan');
+        }
+
+        return redirect()->to("penjualan/detail/{$id}")->with('success', 'Penjualan berhasil diupdate');
+    }
+
+    public function delete($id)
+    {
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $penjualan = $this->penjualanModel->find($id);
+        if (!$penjualan) {
+            return redirect()->to('penjualan')->with('error', 'Data tidak ditemukan');
+        }
+
+        $db = \Config\Database::connect();
+        $db->transStart();
+
+        $this->detailPenjualanModel->where('id_penjualan', $id)->delete();
+        $this->penjualanModel->delete($id);
+
+        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            return redirect()->to('penjualan')->with('error', 'Gagal menghapus penjualan');
+        }
+
+        return redirect()->to('penjualan')->with('success', 'Penjualan berhasil dihapus');
     }
 }

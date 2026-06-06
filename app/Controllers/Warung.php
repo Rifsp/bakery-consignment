@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Controllers;
 
 use App\Models\WarungModel;
@@ -16,6 +17,8 @@ class Warung extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = [
             'user' => $this->getUser(),
@@ -29,6 +32,8 @@ class Warung extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = ['user' => $this->getUser()];
         return view('warung/form', $data);
@@ -38,6 +43,8 @@ class Warung extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = [
             'kode_warung' => $this->generateKodeMaster('warung', 'kode_warung', 'WRG'),
@@ -45,6 +52,7 @@ class Warung extends BaseController
             'alamat' => $this->request->getPost('alamat'),
             'nama_pemilik' => $this->request->getPost('nama_pemilik'),
             'no_telepon' => $this->request->getPost('no_telepon'),
+            'status_aktif' => $this->request->getPost('status_aktif') ? true : false,
         ];
 
         if ($this->warungModel->insert($data)) {
@@ -57,6 +65,8 @@ class Warung extends BaseController
     public function edit($id)
     {
         $redirect = $this->requireLogin();
+        if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
         if ($redirect) return $redirect;
 
         $warung = $this->warungModel->find($id);
@@ -76,6 +86,13 @@ class Warung extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $warung = $this->warungModel->find($id);
+        if (!$warung) {
+            return redirect()->to('warung')->with('error', 'Warung tidak ditemukan');
+        }
 
         $data = [
             'kode_warung' => $this->request->getPost('kode_warung'),
@@ -83,6 +100,7 @@ class Warung extends BaseController
             'alamat' => $this->request->getPost('alamat'),
             'nama_pemilik' => $this->request->getPost('nama_pemilik'),
             'no_telepon' => $this->request->getPost('no_telepon'),
+            'status_aktif' => $this->request->getPost('status_aktif') ? true : false,
         ];
 
         if ($this->warungModel->update($id, $data)) {
@@ -96,6 +114,13 @@ class Warung extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $warung = $this->warungModel->find($id);
+        if (!$warung) {
+            return redirect()->to('warung')->with('error', 'Warung tidak ditemukan');
+        }
 
         $this->warungModel->delete($id);
         return redirect()->to('warung')->with('success', 'Warung berhasil dihapus');

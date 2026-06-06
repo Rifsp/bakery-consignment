@@ -20,6 +20,8 @@ class Produk extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = [
             'user' => $this->getUser(),
@@ -33,6 +35,8 @@ class Produk extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = ['user' => $this->getUser()];
         return view('produk/form', $data);
@@ -42,6 +46,8 @@ class Produk extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = [
             'kode_produk' => $this->request->getPost('kode_produk'),
@@ -49,7 +55,7 @@ class Produk extends BaseController
             'kategori' => $this->request->getPost('kategori'),
             'deskripsi' => $this->request->getPost('deskripsi'),
             'hpp' => $this->request->getPost('hpp'),
-            'stok_minimum' => $this->request->getPost('stok_minimum'),
+            'stok_minimum' => $this->request->getPost('stok_minimum') ?: 0,
         ];
 
         if ($this->produkModel->insert($data)) {
@@ -63,6 +69,8 @@ class Produk extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $produk = $this->produkModel->find($id);
         if (!$produk) {
@@ -72,7 +80,6 @@ class Produk extends BaseController
         $data = [
             'user' => $this->getUser(),
             'produk' => $produk,
-            'harga_jual' => $this->hargaJualModel->where('id_produk', $id)->findAll(),
         ];
 
         return view('produk/form', $data);
@@ -82,6 +89,13 @@ class Produk extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $produk = $this->produkModel->find($id);
+        if (!$produk) {
+            return redirect()->to('produk')->with('error', 'Produk tidak ditemukan');
+        }
 
         $data = [
             'kode_produk' => $this->request->getPost('kode_produk'),
@@ -89,7 +103,7 @@ class Produk extends BaseController
             'kategori' => $this->request->getPost('kategori'),
             'deskripsi' => $this->request->getPost('deskripsi'),
             'hpp' => $this->request->getPost('hpp'),
-            'stok_minimum' => $this->request->getPost('stok_minimum'),
+            'stok_minimum' => $this->request->getPost('stok_minimum') ?: 0,
         ];
 
         if ($this->produkModel->update($id, $data)) {
@@ -103,6 +117,13 @@ class Produk extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $produk = $this->produkModel->find($id);
+        if (!$produk) {
+            return redirect()->to('produk')->with('error', 'Produk tidak ditemukan');
+        }
 
         $this->hargaJualModel->where('id_produk', $id)->delete();
         $this->produkModel->delete($id);
@@ -110,13 +131,14 @@ class Produk extends BaseController
         return redirect()->to('produk')->with('success', 'Produk berhasil dihapus');
     }
 
-    // Harga Jual
-    public function harga($produk_id)
+    public function harga($id_produk)
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
-        $produk = $this->produkModel->find($produk_id);
+        $produk = $this->produkModel->find($id_produk);
         if (!$produk) {
             return redirect()->to('produk')->with('error', 'Produk tidak ditemukan');
         }
@@ -124,19 +146,23 @@ class Produk extends BaseController
         $data = [
             'user' => $this->getUser(),
             'produk' => $produk,
-            'harga_jual' => $this->hargaJualModel->where('id_produk', $produk_id)->findAll(),
+            'harga_list' => $this->hargaJualModel->where('id_produk', $id_produk)->findAll(),
         ];
 
         return view('produk/harga', $data);
     }
 
-    public function storeHarga($produk_id)
+    public function storeHarga()
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $id_produk = $this->request->getPost('id_produk');
 
         $data = [
-            'id_produk' => $produk_id,
+            'id_produk' => $id_produk,
             'nama_harga' => $this->request->getPost('nama_harga'),
             'harga_jual' => $this->request->getPost('harga_jual'),
             'fee_sales' => $this->request->getPost('fee_sales'),
@@ -144,7 +170,7 @@ class Produk extends BaseController
         ];
 
         if ($this->hargaJualModel->insert($data)) {
-            return redirect()->back()->with('success', 'Harga jual berhasil ditambahkan');
+            return redirect()->to("produk/harga/{$id_produk}")->with('success', 'Harga jual berhasil ditambahkan');
         }
 
         return redirect()->back()->withInput()->with('errors', $this->hargaJualModel->errors());
@@ -154,10 +180,17 @@ class Produk extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $harga = $this->hargaJualModel->find($id);
+        if (!$harga) {
+            return redirect()->to('produk')->with('error', 'Harga tidak ditemukan');
+        }
+
+        $id_produk = $harga['id_produk'];
         $this->hargaJualModel->delete($id);
 
-        return redirect()->back()->with('success', 'Harga jual berhasil dihapus');
+        return redirect()->to("produk/harga/{$id_produk}")->with('success', 'Harga jual berhasil dihapus');
     }
 }

@@ -1,3 +1,4 @@
+<?php $role = session()->get('role'); ?>
 <?= view('layout/header', ['title' => 'Penjualan']) ?>
 <?= view('layout/sidebar') ?>
 <div class="main-content">
@@ -51,7 +52,13 @@
                                     <td><?= $p['nama_warung'] ?></td>
                                     <td>Rp <?= number_format($p['total_penjualan'], 0, ',', '.') ?></td>
                                     <td class="text-success">Rp <?= number_format($p['total_profit'], 0, ',', '.') ?></td>
-                                    <td><a href="penjualan/detail/<?= $p['id'] ?>" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a></td>
+                                    <td>
+                                        <a href="penjualan/detail/<?= $p['id'] ?>" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a>
+                                        <?php if ($role === 'admin'): ?>
+                                            <a href="penjualan/edit/<?= $p['id'] ?>" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>
+                                            <a href="penjualan/delete/<?= $p['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Yakin hapus?')"><i class="bi bi-trash"></i></a>
+                                        <?php endif; ?>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>

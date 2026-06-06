@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Controllers;
 
 use App\Models\PembelianModel;
@@ -25,6 +26,8 @@ class Pembelian extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $tanggalMulai = $this->request->getGet('tanggal_mulai') ?? date('Y-m-01');
         $tanggalAkhir = $this->request->getGet('tanggal_akhir') ?? date('Y-m-d');
@@ -49,6 +52,8 @@ class Pembelian extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = [
             'user' => $this->getUser(),
@@ -63,27 +68,29 @@ class Pembelian extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
-        $db = \Config\Database::connect();
-        $db->transStart();
-
-        $totalPembelian = 0;
         $produkIds = $this->request->getPost('id_produk');
         $jumlahs = $this->request->getPost('jumlah');
         $hargaBelis = $this->request->getPost('harga_beli');
 
+        $totalPembelian = 0;
         if ($produkIds) {
             foreach ($produkIds as $i => $produkId) {
-                $totalPembelian += $hargaBelis[$i] * $jumlahs[$i];
+                $totalPembelian += $jumlahs[$i] * $hargaBelis[$i];
             }
         }
+
+        $db = \Config\Database::connect();
+        $db->transStart();
 
         $pembelianData = [
             'kode_pembelian' => $this->generateKodeTransaksi('pembelian', 'kode_pembelian', 'BL'),
             'id_supplier' => $this->request->getPost('id_supplier'),
             'tanggal_pembelian' => $this->request->getPost('tanggal_pembelian'),
             'total_pembelian' => $totalPembelian,
-            'status_pembayaran' => $this->request->getPost('status_pembayaran'),
+            'status_pembayaran' => $this->request->getPost('status_pembayaran') ?? 'belum_bayar',
             'keterangan' => $this->request->getPost('keterangan'),
         ];
 
@@ -92,12 +99,15 @@ class Pembelian extends BaseController
 
         if ($produkIds) {
             foreach ($produkIds as $i => $produkId) {
+                $jumlah = (int) $jumlahs[$i];
+                $hargaBeli = (float) $hargaBelis[$i];
+
                 $this->detailPembelianModel->insert([
                     'id_pembelian' => $pembelianId,
                     'id_produk' => $produkId,
-                    'jumlah' => $jumlahs[$i],
-                    'harga_beli' => $hargaBelis[$i],
-                    'subtotal' => $hargaBelis[$i] * $jumlahs[$i],
+                    'jumlah' => $jumlah,
+                    'harga_beli' => $hargaBeli,
+                    'subtotal' => $hargaBeli * $jumlah,
                 ]);
             }
         }
@@ -114,6 +124,8 @@ class Pembelian extends BaseController
     public function detail($id)
     {
         $redirect = $this->requireLogin();
+        if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
         if ($redirect) return $redirect;
 
         $pembelian = $this->pembelianModel
@@ -144,14 +156,23 @@ class Pembelian extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
-        $status = $this->request->getPost('status_pembayaran');
-
-        if (!in_array($status, ['belum_lunas', 'cicil', 'lunas'])) {
-            return redirect()->back()->with('error', 'Status tidak valid');
+        $pembelian = $this->pembelianModel->find($id);
+        if (!$pembelian) {
+            return redirect()->to('pembelian')->with('error', 'Data tidak ditemukan');
         }
 
-        $this->pembelianModel->update($id, ['status_pembayaran' => $status]);
-        return redirect()->to('pembelian/detail/' . $id)->with('success', 'Status pembayaran berhasil diupdate');
+        $statusPembayaran = $this->request->getPost('status_pembayaran');
+        $allowedStatuses = ['belum_bayar', 'dp', 'lunas'];
+
+        if (!in_array($statusPembayaran, $allowedStatuses)) {
+            return redirect()->back()->with('error', 'Status pembayaran tidak valid');
+        }
+
+        $this->pembelianModel->update($id, ['status_pembayaran' => $statusPembayaran]);
+
+        return redirect()->to("pembelian/detail/{$id}")->with('success', 'Status pembayaran berhasil diupdate');
     }
 }

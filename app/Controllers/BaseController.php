@@ -96,4 +96,57 @@ abstract class BaseController extends Controller
 
         return $prefix . '-' . str_pad($nextNum, 4, '0', STR_PAD_LEFT);
     }
+
+    protected function requireRole($allowedRoles)
+    {
+        $user = $this->getUser();
+        if (!in_array($user['role'], $allowedRoles)) {
+            return redirect()->to('dashboard')->with('error', 'Anda tidak memiliki akses');
+        }
+        return null;
+    }
+
+    protected function getSalesId()
+    {
+        return $this->session->get('sales_id');
+    }
+
+    protected function hitungStokWarung($id_warung, $id_produk)
+    {
+        $db = \Config\Database::connect();
+        $result = $db->query("
+            SELECT 
+                (COALESCE(SUM(dd.jumlah), 0) - COALESCE(SUM(dp.jumlah_terjual), 0) - COALESCE(SUM(dr.jumlah), 0)) as sisa
+            FROM produk p
+            LEFT JOIN distribusi d ON d.id_warung = ?
+            LEFT JOIN detail_distribusi dd ON dd.id_distribusi = d.id AND dd.id_produk = p.id
+            LEFT JOIN penjualan pj ON pj.id_warung = ?
+            LEFT JOIN detail_penjualan dp ON dp.id_penjualan = pj.id AND dp.id_produk = p.id
+            LEFT JOIN retur r ON r.id_warung = ?
+            LEFT JOIN detail_retur dr ON dr.id_retur = r.id AND dr.id_produk = p.id
+            WHERE p.id = ?
+            GROUP BY p.id
+        ", [$id_warung, $id_warung, $id_warung, $id_produk])->getRowArray();
+
+        return $result ? (int) $result['sisa'] : 0;
+    }
+
+    protected function hitungStokSales($id_sales, $id_produk)
+    {
+        $db = \Config\Database::connect();
+        $result = $db->query("
+            SELECT 
+                (COALESCE(SUM(ss.jumlah), 0) - COALESCE(SUM(dd.jumlah), 0) - COALESCE(SUM(dr.jumlah), 0)) as sisa
+            FROM produk p
+            LEFT JOIN stok_sales ss ON ss.id_sales = ? AND ss.id_produk = p.id
+            LEFT JOIN distribusi d ON d.id_sales = ?
+            LEFT JOIN detail_distribusi dd ON dd.id_distribusi = d.id AND dd.id_produk = p.id
+            LEFT JOIN retur r ON r.id_sales = ?
+            LEFT JOIN detail_retur dr ON dr.id_retur = r.id AND dr.id_produk = p.id
+            WHERE p.id = ?
+            GROUP BY p.id
+        ", [$id_sales, $id_sales, $id_sales, $id_produk])->getRowArray();
+
+        return $result ? (int) $result['sisa'] : 0;
+    }
 }

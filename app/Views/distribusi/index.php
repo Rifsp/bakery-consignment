@@ -1,3 +1,4 @@
+<?php $role = session()->get('role'); ?>
 <?= view('layout/header', ['title' => 'Distribusi']) ?>
 <?= view('layout/sidebar') ?>
 <div class="main-content">
@@ -50,7 +51,13 @@
                                     <td><?= $d['nama_sales'] ?></td>
                                     <td><?= $d['nama_warung'] ?></td>
                                     <td><?= $d['keterangan'] ?></td>
-                                    <td><a href="distribusi/detail/<?= $d['id'] ?>" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a></td>
+                                    <td>
+                                        <a href="distribusi/detail/<?= $d['id'] ?>" class="btn btn-sm btn-info"><i class="bi bi-eye"></i></a>
+                                        <?php if ($role === 'admin'): ?>
+                                            <a href="distribusi/edit/<?= $d['id'] ?>" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>
+                                            <a href="distribusi/delete/<?= $d['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Yakin hapus?')"><i class="bi bi-trash"></i></a>
+                                        <?php endif; ?>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>

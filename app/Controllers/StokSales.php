@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Controllers;
 
 use App\Models\StokSalesModel;
@@ -22,9 +23,8 @@ class StokSales extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
-
-        $tanggalMulai = $this->request->getGet('tanggal_mulai') ?? date('Y-m-01');
-        $tanggalAkhir = $this->request->getGet('tanggal_akhir') ?? date('Y-m-d');
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = [
             'user' => $this->getUser(),
@@ -32,12 +32,8 @@ class StokSales extends BaseController
                 ->select('stok_sales.*, sales.nama_sales, produk.nama_produk')
                 ->join('sales', 'sales.id = stok_sales.id_sales')
                 ->join('produk', 'produk.id = stok_sales.id_produk')
-                ->where('stok_sales.tanggal_input >=', $tanggalMulai)
-                ->where('stok_sales.tanggal_input <=', $tanggalAkhir)
-                ->orderBy('stok_sales.tanggal_input', 'DESC')
+                ->orderBy('stok_sales.created_at', 'DESC')
                 ->findAll(),
-            'tanggal_mulai' => $tanggalMulai,
-            'tanggal_akhir' => $tanggalAkhir,
         ];
 
         return view('stok_sales/index', $data);
@@ -46,6 +42,8 @@ class StokSales extends BaseController
     public function create()
     {
         $redirect = $this->requireLogin();
+        if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
         if ($redirect) return $redirect;
 
         $data = [
@@ -61,28 +59,44 @@ class StokSales extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
-        $data = [
-            'kode_stok' => $this->generateKodeTransaksi('stok_sales', 'kode_stok', 'SK'),
-            'id_sales' => $this->request->getPost('id_sales'),
-            'id_produk' => $this->request->getPost('id_produk'),
-            'jumlah' => $this->request->getPost('jumlah'),
-            'tanggal_input' => $this->request->getPost('tanggal_input'),
-            'status' => 'di_sales',
-            'created_by' => $this->getUser()['id'],
-            'keterangan' => $this->request->getPost('keterangan'),
-        ];
+        $produkIds = $this->request->getPost('id_produk');
+        $jumlahs = $this->request->getPost('jumlah');
 
-        if ($this->stokSalesModel->insert($data)) {
-            return redirect()->to('stok-sales')->with('success', 'Stok berhasil ditambahkan ke sales');
+        $db = \Config\Database::connect();
+        $db->transStart();
+
+        if ($produkIds) {
+            foreach ($produkIds as $i => $produkId) {
+                $this->stokSalesModel->insert([
+                    'kode_stok' => $this->generateKodeTransaksi('stok_sales', 'kode_stok', 'SK'),
+                    'id_sales' => $this->request->getPost('id_sales'),
+                    'id_produk' => $produkId,
+                    'jumlah' => $jumlahs[$i],
+                    'tanggal_input' => $this->request->getPost('tanggal_input'),
+                    'status' => 'di_sales',
+                    'created_by' => $this->getUser()['id'],
+                    'keterangan' => $this->request->getPost('keterangan'),
+                ]);
+            }
         }
 
-        return redirect()->back()->withInput()->with('errors', $this->stokSalesModel->errors());
+        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            return redirect()->back()->withInput()->with('error', 'Gagal menyimpan stok sales');
+        }
+
+        return redirect()->to('stok-sales')->with('success', 'Stok sales berhasil disimpan');
     }
 
     public function detail($id)
     {
         $redirect = $this->requireLogin();
+        if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
         if ($redirect) return $redirect;
 
         $stok = $this->stokSalesModel
@@ -107,14 +121,23 @@ class StokSales extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $stok = $this->stokSalesModel->find($id);
+        if (!$stok) {
+            return redirect()->to('stok-sales')->with('error', 'Data tidak ditemukan');
+        }
 
         $status = $this->request->getPost('status');
+        $allowedStatuses = ['di_sales', 'sudah_distribusi', 'retur'];
 
-        if (!in_array($status, ['di_sales', 'sudah_distribusi', 'retur'])) {
+        if (!in_array($status, $allowedStatuses)) {
             return redirect()->back()->with('error', 'Status tidak valid');
         }
 
         $this->stokSalesModel->update($id, ['status' => $status]);
-        return redirect()->to('stok-sales/detail/' . $id)->with('success', 'Status berhasil diupdate');
+
+        return redirect()->to("stok-sales/detail/{$id}")->with('success', 'Status berhasil diupdate');
     }
 }

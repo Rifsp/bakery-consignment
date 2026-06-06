@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Models\UserModel;
+use App\Models\SalesModel;
 
 class Auth extends BaseController
 {
@@ -38,6 +39,12 @@ class Auth extends BaseController
             'role' => $user['role'],
             'logged_in' => true,
         ]);
+
+        if ($user['role'] === 'sales') {
+            $salesModel = new SalesModel();
+            $sales = $salesModel->where('id_user', $user['id'])->first();
+            $this->session->set('sales_id', $sales['id'] ?? null);
+        }
 
         return redirect()->to('dashboard');
     }

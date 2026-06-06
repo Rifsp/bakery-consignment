@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Controllers;
 
 use App\Models\SalesModel;
@@ -19,10 +20,16 @@ class Sales extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = [
             'user' => $this->getUser(),
-            'sales' => $this->salesModel->orderBy('nama_sales', 'ASC')->findAll(),
+            'sales' => $this->salesModel
+                ->select('sales.*, users.username')
+                ->join('users', 'users.id = sales.id_user', 'left')
+                ->orderBy('sales.nama_sales', 'ASC')
+                ->findAll(),
         ];
 
         return view('sales/index', $data);
@@ -32,11 +39,14 @@ class Sales extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = [
             'user' => $this->getUser(),
-            'users' => $this->userModel->where('role', 'sales')->findAll(),
+            'users' => $this->userModel->where('role', 'sales')->where('status_aktif', true)->findAll(),
         ];
+
         return view('sales/form', $data);
     }
 
@@ -44,13 +54,16 @@ class Sales extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $data = [
-            'id_user' => $this->request->getPost('id_user') ?: null,
             'kode_sales' => $this->generateKodeMaster('sales', 'kode_sales', 'SLS'),
+            'id_user' => $this->request->getPost('id_user') ?: null,
             'nama_sales' => $this->request->getPost('nama_sales'),
             'no_telepon' => $this->request->getPost('no_telepon'),
             'alamat' => $this->request->getPost('alamat'),
+            'status_aktif' => $this->request->getPost('status_aktif') ? true : false,
         ];
 
         if ($this->salesModel->insert($data)) {
@@ -64,6 +77,8 @@ class Sales extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
 
         $sales = $this->salesModel->find($id);
         if (!$sales) {
@@ -73,7 +88,7 @@ class Sales extends BaseController
         $data = [
             'user' => $this->getUser(),
             'sales' => $sales,
-            'users' => $this->userModel->where('role', 'sales')->findAll(),
+            'users' => $this->userModel->where('role', 'sales')->where('status_aktif', true)->findAll(),
         ];
 
         return view('sales/form', $data);
@@ -83,13 +98,20 @@ class Sales extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $sales = $this->salesModel->find($id);
+        if (!$sales) {
+            return redirect()->to('sales')->with('error', 'Sales tidak ditemukan');
+        }
 
         $data = [
             'id_user' => $this->request->getPost('id_user') ?: null,
-            'kode_sales' => $this->request->getPost('kode_sales'),
             'nama_sales' => $this->request->getPost('nama_sales'),
             'no_telepon' => $this->request->getPost('no_telepon'),
             'alamat' => $this->request->getPost('alamat'),
+            'status_aktif' => $this->request->getPost('status_aktif') ? true : false,
         ];
 
         if ($this->salesModel->update($id, $data)) {
@@ -103,6 +125,13 @@ class Sales extends BaseController
     {
         $redirect = $this->requireLogin();
         if ($redirect) return $redirect;
+        $redirect = $this->requireRole(['admin']);
+        if ($redirect) return $redirect;
+
+        $sales = $this->salesModel->find($id);
+        if (!$sales) {
+            return redirect()->to('sales')->with('error', 'Sales tidak ditemukan');
+        }
 
         $this->salesModel->delete($id);
         return redirect()->to('sales')->with('success', 'Sales berhasil dihapus');
